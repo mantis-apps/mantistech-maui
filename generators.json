@@ -1,0 +1,9 @@
+{
+  "generators": {
+    "maui": {
+      "factory": "./generators/maui/generator",
+      "schema": "./generators/maui/schema.json",
+      "description": "maui generator"
+    }
+  }
+}
