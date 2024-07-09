@@ -1,3 +1,4 @@
 export interface MauiGeneratorSchema {
-  name: string;
+  project: string;
+  standalone?: boolean;
 }
