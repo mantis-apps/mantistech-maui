@@ -1,9 +1,9 @@
 {
   "generators": {
-    "preset": {
-      "factory": "./src/generators/preset/generator",
-      "schema": "./src/generators/preset/schema.json",
-      "description": "preset generator",
+    "maui": {
+      "factory": "./src/generators/maui/generator",
+      "schema": "./src/generators/maui/schema.json",
+      "description": "maui generator",
       "x-use-standalone-layout": true
     }
   }

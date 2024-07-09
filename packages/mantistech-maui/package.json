@@ -1,5 +1,5 @@
 {
-  "name": "mantistech-maui",
+  "name": "@mantistechio/maui",
   "version": "0.0.1",
   "dependencies": {
     "@nx/devkit": "19.4.2",

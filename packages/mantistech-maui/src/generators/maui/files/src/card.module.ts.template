@@ -1,0 +1,30 @@
+import { NgModule } from '@angular/core';
+
+import { CardComponent } from './components/card/partials/card.component';
+import { CardHeaderComponent } from './components/card/partials/card-header.component';
+import { CardTitleComponent } from './components/card/partials/card-title.component';
+import { CardDescriptionComponent } from './components/card/partials/card-description.component';
+import { CardContentComponent } from './components/card/partials/card-content.component';
+import { CardFooterComponent } from './components/card/partials/card-footer.component';
+
+export * from './components/card/partials/card.component';
+export * from './components/card/partials/card-header.component';
+export * from './components/card/partials/card-title.component';
+export * from './components/card/partials/card-description.component';
+export * from './components/card/partials/card-content.component';
+export * from './components/card/partials/card-footer.component';
+
+export const CardComponentImports = [
+  CardComponent,
+  CardHeaderComponent,
+  CardTitleComponent,
+  CardDescriptionComponent,
+  CardContentComponent,
+  CardFooterComponent,
+] as const;
+
+@NgModule({
+  imports: [...CardComponentImports],
+  exports: [...CardComponentImports],
+})
+export class CardModule {}
