@@ -1,4 +1,5 @@
 export interface MauiGeneratorSchema {
   project: string;
-  standalone?: boolean;
+  standalone: boolean;
+  newWorkspace: boolean;
 }

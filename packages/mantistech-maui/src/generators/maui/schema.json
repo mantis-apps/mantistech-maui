@@ -2,23 +2,26 @@
   "$schema": "http://json-schema.org/schema",
   "cli": "nx",
   "$id": "Maui",
-  "title": "Add Mantis UI to existing project",
+  "title": "Add Mantis UI to project",
   "type": "object",
   "properties": {
     "project": {
       "type": "string",
       "description": "The name of the project to add Mantis UI to",
-      "$default": {
-        "$source": "projectName"
-      },
-      "x-prompt": "What project would you like to add Mantis UI to?"
+      "x-prompt": "What's the name of the project you want to add Mantis UI to?"
     },
     "standalone": {
       "type": "boolean",
-      "description": "Whether the project uses the standalone component approach",
-      "default": false
+      "description": "Whether to use standalone components",
+      "default": true,
+      "x-prompt": "Do you want to use standalone components? (Y/n)"
     },
-    "x-prompt": "Is this a standalone component project?"
+    "newWorkspace": {
+      "type": "boolean",
+      "description": "Whether this is a new workspace",
+      "default": false
+    }
   },
   "required": ["project"]
 }
+
