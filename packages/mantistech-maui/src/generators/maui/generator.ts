@@ -13,33 +13,43 @@ import * as path from 'path';
 import { MauiGeneratorSchema } from './schema';
 
 export async function mauiGenerator(tree: Tree, options: MauiGeneratorSchema) {
-  const isNewWorkspace = options.newWorkspace;
   const projectName = options.project || 'maui-app';
-  const useStandalone = options.standalone;
+  const libName = 'maui';
+  const libRoot = `libs/${libName}`;
 
-  if (isNewWorkspace) {
-    console.log('Creating a new workspace is not implemented in this generator. Please create a workspace first.');
-    return;
-  }
+  // 1. Create MAUI lib
+  addProjectConfiguration(tree, libName, {
+    root: libRoot,
+    projectType: 'library',
+    sourceRoot: `${libRoot}/src`,
+    targets: {
+      build: {
+        executor: '@nx/angular:package',
+        outputs: ['{workspaceRoot}/dist/{projectRoot}'],
+        options: {
+          project: `${libRoot}/ng-package.json`
+        }
+      }
+    }
+  });
 
-  // Read existing project configuration or create a new one
-  let projectConfig;
-  try {
-    projectConfig = readProjectConfiguration(tree, projectName);
-  } catch {
-    projectConfig = {
-      root: `apps/${projectName}`,
-      sourceRoot: `apps/${projectName}/src`,
-      projectType: 'application',
-      targets: {},
-    };
-    addProjectConfiguration(tree, projectName, projectConfig);
-  }
+  // 2. Copy MAUI components
+  generateFiles(
+    tree,
+    path.join(__dirname, 'files', 'maui'),
+    `${libRoot}/src/lib`,
+    options
+  );
 
-  const projectRoot = projectConfig.root;
-  const featureRoot = `${projectRoot}/feature`;
+  // 3. Copy Spartan UI helm components
+  generateFiles(
+    tree,
+    path.join(__dirname, 'files', 'spartanui'),
+    `${libRoot}/src/lib/spartanui`,
+    options
+  );
 
-  // 1. Install dependencies
+  // 4. Install dependencies
   const spartanDependencies = {
     "@spartan-ng/ui-accordion-brain": "0.0.1-alpha.352",
     "@spartan-ng/ui-alertdialog-brain": "0.0.1-alpha.352",
@@ -71,105 +81,104 @@ export async function mauiGenerator(tree: Tree, options: MauiGeneratorSchema) {
     '@angular/cdk': 'latest',
   });
 
-  // 2. Copy Spartan UI helm components
-  generateFiles(
-    tree,
-    path.join(__dirname, 'files', 'spartanui'),
-    `${featureRoot}/spartanui`,
-    {
-      ...options,
-      template: '',
-      standalone: useStandalone,
-    }
-  );
+  // 5. Update tsconfig
+  updateTsConfig(tree, libRoot);
 
-  // 3. Update tsconfig.base.json
-  updateJson(tree, 'tsconfig.base.json', (json) => {
-    json.compilerOptions = json.compilerOptions || {};
-    json.compilerOptions.paths = json.compilerOptions.paths || {};
-
-    const helmComponents = tree.children(`${__dirname}/files/spartanui`);
-    helmComponents.forEach(component => {
-      json.compilerOptions.paths[`@spartan-ng/${component}`] = [`${featureRoot}/spartanui/${component}/src/index.ts`];
-    });
-
-    return json;
-  });
-
-  // 4. Set up Tailwind CSS configuration
-  const tailwindConfig = `
-const { createGlobPatternsForDependencies } = require('@nx/angular/tailwind');
-const { join } = require('path');
-
-/** @type {import('tailwindcss').Config} */
-module.exports = {
-  presets: [require('@spartan-ng/ui-core/hlm-tailwind-preset')],
-  content: [
-    join(__dirname, 'src/**/!(*.stories|*.spec).{ts,html}'),
-    ...createGlobPatternsForDependencies(__dirname),
-  ],
-  theme: {
-    extend: {},
-  },
-  plugins: [],
-};
-`;
-
-  tree.write(`${projectRoot}/tailwind.config.js`, tailwindConfig);
-
-  // 5. Generate MAUI components
-  generateFiles(
-    tree,
-    path.join(__dirname, 'files', 'maui'),
-    `${featureRoot}/ui/src/lib/ui/components`,
-    {
-      ...options,
-      template: '',
-      standalone: useStandalone,
-    }
-  );
-
-  // 6. Update main.ts or app.module.ts based on standalone option
-  if (useStandalone) {
-    updateStandaloneApp(tree, projectConfig);
-  } else {
-    updateModularApp(tree, projectConfig);
-  }
+  // 6. Handle Tailwind CSS
+  handleTailwindCSS(tree, projectName);
 
   await formatFiles(tree);
 
   return () => {
     installPackagesTask(tree);
+    console.log('MAUI lib has been generated successfully.');
     console.log('After installation, run: npx nx g @spartan-ng/cli:ui-theme');
     console.log('Then run: npx nx g @spartan-ng/cli:ui');
   };
 }
 
-function updateStandaloneApp(tree: Tree, projectConfig: any) {
-  const mainPath = `${projectConfig.sourceRoot}/main.ts`;
-  if (tree.exists(mainPath)) {
-    let mainContent = tree.read(mainPath, 'utf-8');
-    if (mainContent.includes('bootstrapApplication')) {
-      mainContent = mainContent.replace(
-        /bootstrapApplication\((.*?),\s*{/s,
-        `bootstrapApplication($1, {\n  imports: [MauiModule],`
-      );
-      mainContent = `import { MauiModule } from './app/maui.module';\n${mainContent}`;
-      tree.write(mainPath, mainContent);
-    }
-  }
+function updateTsConfig(tree: Tree, libRoot: string) {
+  const tsConfigPath = tree.exists('tsconfig.base.json')
+    ? 'tsconfig.base.json'
+    : 'tsconfig.json';
+
+  updateJson(tree, tsConfigPath, (json) => {
+    json.compilerOptions = json.compilerOptions || {};
+    json.compilerOptions.paths = json.compilerOptions.paths || {};
+
+    json.compilerOptions.paths["@mantistech/ui"] = [`${libRoot}/src/index.ts`];
+    json.compilerOptions.paths["@mantistech/ui/schematics"] = [`${libRoot}/schematics/src/index.ts`];
+
+    const helmComponents = tree.children(`${libRoot}/src/lib/spartanui`);
+    helmComponents.forEach(component => {
+      json.compilerOptions.paths[`@spartan-ng/${component}`] = [`${libRoot}/src/lib/spartanui/${component}/src/index.ts`];
+    });
+
+    return json;
+  });
 }
 
-function updateModularApp(tree: Tree, projectConfig: any) {
-  const appModulePath = `${projectConfig.sourceRoot}/app/app.module.ts`;
-  if (tree.exists(appModulePath)) {
-    let appModuleContent = tree.read(appModulePath, 'utf-8');
-    appModuleContent = appModuleContent.replace(
-      'imports: [',
-      'imports: [\n    MauiModule,'
-    );
-    appModuleContent = `import { MauiModule } from './maui.module';\n${appModuleContent}`;
-    tree.write(appModulePath, appModuleContent);
+function handleTailwindCSS(tree: Tree, projectName: string) {
+  const projectConfig = readProjectConfiguration(tree, projectName);
+  const projectRoot = projectConfig.root;
+
+  // Check if Tailwind is already installed
+  const packageJsonPath = 'package.json';
+  const packageJson = JSON.parse(tree.read(packageJsonPath).toString());
+  const hasTailwind = packageJson.dependencies['tailwindcss'] || packageJson.devDependencies['tailwindcss'];
+
+  if (!hasTailwind) {
+    // Install Tailwind CSS
+    addDependenciesToPackageJson(tree, {}, {
+      'tailwindcss': '^3.0.0',
+      'postcss': '^8.4.5',
+      'autoprefixer': '^10.4.0'
+    });
+
+    // Create Tailwind config
+    const tailwindConfig = `
+      const { createGlobPatternsForDependencies } = require('@nx/angular/tailwind');
+      const { join } = require('path');
+
+      /** @type {import('tailwindcss').Config} */
+      module.exports = {
+        presets: [require('@spartan-ng/ui-core/hlm-tailwind-preset')],
+        content: [
+          join(__dirname, 'src/**/!(*.stories|*.spec).{ts,html}'),
+          ...createGlobPatternsForDependencies(__dirname),
+        ],
+        theme: {
+          extend: {},
+        },
+        plugins: [],
+      };
+    `;
+
+    tree.write(`${projectRoot}/tailwind.config.js`, tailwindConfig);
+
+    // Update styles.css
+    const stylesPath = `${projectRoot}/src/styles.css`;
+    const stylesContent = tree.read(stylesPath).toString();
+    const updatedStylesContent = `
+      @import 'tailwindcss/base';
+      @import 'tailwindcss/components';
+      @import 'tailwindcss/utilities';
+      ${stylesContent}
+    `;
+    tree.write(stylesPath, updatedStylesContent);
+
+  } else {
+    // Update existing Tailwind config
+    const tailwindConfigPath = `${projectRoot}/tailwind.config.js`;
+    if (tree.exists(tailwindConfigPath)) {
+      const tailwindConfig = tree.read(tailwindConfigPath).toString();
+      const updatedConfig = tailwindConfig.replace(
+        'module.exports = {',
+        `module.exports = {
+          presets: [require('@spartan-ng/ui-core/hlm-tailwind-preset')],`
+      );
+      tree.write(tailwindConfigPath, updatedConfig);
+    }
   }
 }
 
