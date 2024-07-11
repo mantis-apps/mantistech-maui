@@ -5,6 +5,11 @@
       "schema": "./src/generators/maui/schema.json",
       "description": "maui generator",
       "x-use-standalone-layout": true
+    },
+    "tailwindcss": {
+      "factory": "./src/generators/tailwindcss/generator",
+      "schema": "./src/generators/tailwindcss/schema.json",
+      "description": "checks and adds the proper tailwindcss files for a maui project"
     }
   }
 }
