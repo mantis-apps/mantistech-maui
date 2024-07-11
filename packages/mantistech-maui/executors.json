@@ -1,0 +1,9 @@
+{
+  "executors": {
+    "spartanui": {
+      "implementation": "./src/executors/spartanui/executor",
+      "schema": "./src/executors/spartanui/schema.json",
+      "description": "spartanui executor"
+    }
+  }
+}

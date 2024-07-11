@@ -2,7 +2,11 @@
   "name": "@mantistech-maui/source",
   "version": "0.0.0",
   "license": "MIT",
-  "scripts": {},
+  "scripts": {
+    "test": "nx test mantistech-maui",
+    "test:generator": "nx test mantistech-maui --test-file=src/generators/maui/generator.spec.ts",
+    "test:executor": "nx test mantistech-maui --test-file=src/executors/spartanui/executor.spec.ts"
+  },
   "private": true,
   "dependencies": {
     "@nx/devkit": "19.4.2",

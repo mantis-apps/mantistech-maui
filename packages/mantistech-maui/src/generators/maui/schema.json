@@ -2,19 +2,15 @@
   "$schema": "http://json-schema.org/schema",
   "cli": "nx",
   "$id": "Maui",
+  "title": "Create Mantis UI Library",
   "type": "object",
   "properties": {
     "project": {
       "type": "string",
-      "description": "The name of the project to add Mantis UI to",
-      "x-prompt": "What's the name of the project you want to add Mantis UI to?"
-    },
-    "overwrite": {
-      "type": "boolean",
-      "description": "Overwrite existing files",
-      "x-prompt": "Overwrite existing files?",
-      "default": false
+      "description": "The name of the project to update with Mantis UI configurations",
+      "x-prompt": "Which project do you want to update with Mantis UI configurations?"
     }
   },
   "required": ["project"]
 }
+

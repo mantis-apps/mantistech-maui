@@ -1,0 +1,19 @@
+{
+  "$schema": "http://json-schema.org/schema",
+  "version": 2,
+  "cli": "nx",
+  "title": "SpartanUI executor",
+  "description": "",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "The name parameter for the Spartan UI generator"
+    },
+    "directory": {
+      "type": "string",
+      "description": "The directory where Spartan UI components should be generated"
+    }
+  },
+  "required": ["name", "directory"]
+}
