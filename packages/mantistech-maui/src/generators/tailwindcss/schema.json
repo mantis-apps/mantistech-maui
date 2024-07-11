@@ -1,18 +1,27 @@
 {
-  "$schema": "https://json-schema.org/schema",
-  "$id": "Tailwindcss",
-  "title": "",
+  "$schema": "http://json-schema.org/schema",
+  "cli": "nx",
+  "$id": "TailwindCSS",
+  "title": "Configure TailwindCSS",
   "type": "object",
   "properties": {
-    "name": {
+    "project": {
       "type": "string",
-      "description": "",
+      "description": "The name of the project to configure TailwindCSS for",
       "$default": {
-        "$source": "argv",
-        "index": 0
-      },
-      "x-prompt": "What name would you like to use?"
+        "$source": "projectName"
+      }
+    },
+    "skipTailwindConfig": {
+      "type": "boolean",
+      "description": "Skip updating tailwind.config.js",
+      "default": false
+    },
+    "skipStylesUpdate": {
+      "type": "boolean",
+      "description": "Skip updating styles.css",
+      "default": false
     }
   },
-  "required": ["name"]
+  "required": ["project"]
 }
