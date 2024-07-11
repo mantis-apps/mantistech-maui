@@ -1,1 +1,1 @@
-export * from '../../maui/index';
+export * from './index';

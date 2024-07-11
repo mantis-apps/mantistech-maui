@@ -4,15 +4,15 @@ import {
   installPackagesTask,
   generateFiles,
   addProjectConfiguration,
-  readProjectConfiguration,
-  updateProjectConfiguration,
   names,
   offsetFromRoot,
   GeneratorCallback,
+  getProjects,
   runExecutor,
   ExecutorContext,
-  workspaceRoot,
-  getProjects,
+  ProjectConfiguration,
+  TargetConfiguration,
+  addDependenciesToPackageJson
 } from '@nx/devkit';
 import * as path from 'path';
 import { MauiGeneratorSchema } from './schema';
@@ -24,10 +24,22 @@ export async function mauiGenerator(tree: Tree, options: MauiGeneratorSchema): P
   const targetProject = options.project;
 
   console.log('Generator options:', options);
-  console.log('Existing projects:', Array.from(getProjects(tree).keys()));
+  console.log('Existing projects before adding maui:', Array.from(getProjects(tree).keys()));
+
+  // Add Spartan UI dependencies
+  addDependenciesToPackageJson(
+    tree,
+    {
+      '@spartan-ng/ui-core': 'latest',
+    },
+    {
+      '@spartan-ng/cli': 'latest',
+    }
+  );
 
   // 1. Create MAUI lib structure
-  addProjectConfiguration(tree, libName, {
+  console.log('Adding project configuration for:', libName);
+  const projectConfiguration: ProjectConfiguration = {
     root: projectRoot,
     projectType: 'library',
     sourceRoot: `${projectRoot}/src`,
@@ -41,19 +53,20 @@ export async function mauiGenerator(tree: Tree, options: MauiGeneratorSchema): P
           tsConfig: `${projectRoot}/tsconfig.lib.json`,
           assets: [`${projectRoot}/*.md`],
         },
-      },
+      } as TargetConfiguration,
       'generate-spartan-ui': {
-        executor: '@mantistechio/maui:spartanui',
+        executor: 'nx:run-commands',
         options: {
-          name: 'all',
-          directory: `${projectRoot}/src/lib/spartanui`
+          command: `npx nx g @spartan-ng/cli:ui --name=all --directory=${projectRoot}/src/lib/spartanui`
         }
-      }
+      } as TargetConfiguration
     },
     tags: [],
-  });
+  };
 
-  console.log('Added project configuration for:', libName);
+  addProjectConfiguration(tree, libName, projectConfiguration);
+
+  console.log('Project configuration added.');
 
   // 2. Generate MAUI library files
   generateFiles(
@@ -71,126 +84,108 @@ export async function mauiGenerator(tree: Tree, options: MauiGeneratorSchema): P
     { ...projectNames, offsetFromRoot: offsetFromRoot(projectRoot) }
   );
 
-  // 4. Update target project's tailwind.config.js
-  if (targetProject) {
-    const targetProjectConfig = readProjectConfiguration(tree, targetProject);
-    const targetProjectRoot = targetProjectConfig.root;
-    const tailwindConfigPath = `${targetProjectRoot}/tailwind.config.js`;
-
-    if (tree.exists(tailwindConfigPath)) {
-      const tailwindConfig = tree.read(tailwindConfigPath).toString();
-      const updatedTailwindConfig = tailwindConfig.replace(
-        'module.exports = {',
-        `module.exports = {
-  presets: [require('@spartan-ng/ui-core/hlm-tailwind-preset')],`
-      );
-      tree.write(tailwindConfigPath, updatedTailwindConfig);
-    } else {
-      // Create a new tailwind.config.js if it doesn't exist
-      const newTailwindConfig = `
-const { createGlobPatternsForDependencies } = require('@nx/angular/tailwind');
-const { join } = require('path');
-
-module.exports = {
-  presets: [require('@spartan-ng/ui-core/hlm-tailwind-preset')],
-  content: [
-    join(__dirname, 'src/**/!(*.stories|*.spec).{ts,html}'),
-    ...createGlobPatternsForDependencies(__dirname),
-  ],
-  theme: {
-    extend: {},
-  },
-  plugins: [],
-};
-`;
-      tree.write(tailwindConfigPath, newTailwindConfig);
-    }
-
-    // 5. Update target project's styles.css
-    const stylesPath = `${targetProjectRoot}/src/styles.css`;
-    if (tree.exists(stylesPath)) {
-      const stylesContent = tree.read(stylesPath).toString();
-      const updatedStylesContent = `@import 'tailwindcss/base';
-@import 'tailwindcss/components';
-@import 'tailwindcss/utilities';
-
-${stylesContent}`;
-      tree.write(stylesPath, updatedStylesContent);
-    }
-
-    // 6. Update target project's configuration to use tailwind
-    updateProjectConfiguration(tree, targetProject, {
-      ...targetProjectConfig,
-      targets: {
-        ...targetProjectConfig.targets,
-        build: {
-          ...targetProjectConfig.targets.build,
-          options: {
-            ...targetProjectConfig.targets.build.options,
-            styles: [
-              ...targetProjectConfig.targets.build.options.styles,
-              `${targetProjectRoot}/src/styles.css`
-            ]
-          }
-        }
-      }
-    });
-  }
+  console.log('Files generated. Formatting...');
 
   await formatFiles(tree);
 
   return async () => {
+    console.log('Running post-generation tasks...');
     await installPackagesTask(tree);
-    console.log('Installed packages');
+    console.log('Packages installed');
 
     // Run Spartan UI generator
     console.log('Attempting to run Spartan UI generator...');
     try {
-      const projectConfig = readProjectConfiguration(tree, libName);
-      console.log('Project configuration:', projectConfig);
-
       const context: ExecutorContext = {
-        root: workspaceRoot,
+        root: tree.root,
         cwd: process.cwd(),
-        isVerbose: false,
         projectName: libName,
         targetName: 'generate-spartan-ui',
-        taskGraph: null,
-        configurationName: null,
         projectsConfigurations: {
           projects: {
-            [libName]: projectConfig,
+            [libName]: projectConfiguration
           },
-          version: 2,
+          version: 2
         },
         workspace: {
           version: 2,
           projects: {
-            [libName]: projectConfig,
-          },
+            [libName]: projectConfiguration
+          }
         },
+        isVerbose: false,
+        target: projectConfiguration.targets['generate-spartan-ui'] as TargetConfiguration,
       };
 
-      try {
-        const result = await runExecutor(
-          { project: libName, target: 'generate-spartan-ui' },
-          {},
-          context
-        );
-        for await (const output of result) {
-          if (!output.success) {
-            throw new Error('Failed to generate Spartan UI components');
-          }
+      const result = await runExecutor(
+        { project: libName, target: 'generate-spartan-ui' },
+        {},
+        context
+      );
+
+      for await (const output of result) {
+        if (!output.success) {
+          throw new Error('Failed to generate Spartan UI components');
         }
-        console.log('Spartan UI generator completed successfully.');
-      } catch (error) {
-        console.error('Error running Spartan UI generator:', error);
-        throw error;
       }
+
+      console.log('Spartan UI generator completed successfully.');
     } catch (error) {
-      console.error('Error reading project configuration', error);
+      console.error('Error running Spartan UI generator:', error);
+      console.log('Final list of projects:', Array.from(getProjects(tree).keys()));
       throw error;
     }
+
+    // 4. Update target project's tailwind.config.js if specified
+    if (targetProject) {
+      try {
+        const projects = getProjects(tree);
+        const targetProjectConfig = projects.get(targetProject);
+
+        if (!targetProjectConfig) {
+          throw new Error(`Target project '${targetProject}' not found`);
+        }
+
+        const targetProjectRoot = targetProjectConfig.root;
+        const tailwindConfigPath = `${targetProjectRoot}/tailwind.config.js`;
+
+        if (tree.exists(tailwindConfigPath)) {
+          const tailwindConfig = tree.read(tailwindConfigPath).toString();
+          const updatedTailwindConfig = tailwindConfig.replace(
+            'module.exports = {',
+            `module.exports = {
+  presets: [require('@spartan-ng/ui-core/hlm-tailwind-preset')],`
+          );
+          tree.write(tailwindConfigPath, updatedTailwindConfig);
+          console.log(`Updated tailwind.config.js for project ${targetProject}`);
+        } else {
+          console.log(`tailwind.config.js not found for project ${targetProject}. Skipping Tailwind configuration update.`);
+        }
+
+        // 5. Update target project's styles.css
+        const stylesPath = `${targetProjectRoot}/src/styles.css`;
+        if (tree.exists(stylesPath)) {
+          const stylesContent = tree.read(stylesPath).toString();
+          const updatedStylesContent = `@import 'tailwindcss/base';
+@import 'tailwindcss/components';
+@import 'tailwindcss/utilities';
+
+${stylesContent}`;
+          tree.write(stylesPath, updatedStylesContent);
+          console.log(`Updated styles.css for project ${targetProject}`);
+        } else {
+          console.log(`styles.css not found for project ${targetProject}. Skipping styles update.`);
+        }
+
+        console.log(`Finished updating project ${targetProject}`);
+      } catch (error) {
+        console.error(`Error updating target project ${targetProject}:`, error);
+      }
+    } else {
+      console.log('No target project specified. Skipping project-specific updates.');
+    }
+
+    console.log('MAUI generator completed successfully.');
   };
 }
 
