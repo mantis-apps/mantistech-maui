@@ -10,12 +10,13 @@ import {
 import * as path from 'path';
 import * as fs from 'fs';
 import { TailwindCSSGeneratorSchema } from './schema';
+import { mergeConfigs } from './tailwind.config.utils';
 
 export async function tailwindCSSGenerator(
   tree: Tree,
   options: TailwindCSSGeneratorSchema
 ): Promise<GeneratorCallback> {
-  const { project: targetProject, colorMode = 'dark', uiThemeColor = 'theme-green' } = options;
+  const { project: targetProject } = options;
 
   // Install Tailwind CSS and its dependencies
   addDependenciesToPackageJson(
@@ -40,11 +41,11 @@ export async function tailwindCSSGenerator(
       const targetProjectRoot = targetProjectConfig.root;
 
       if (!options.skipTailwindConfig) {
-        updateTailwindConfig(tree, targetProjectRoot, targetProject, colorMode);
+        updateTailwindConfig(tree, targetProjectRoot, targetProject);
       }
 
       if (!options.skipStylesUpdate) {
-        updateStyles(tree, targetProjectRoot, targetProject, uiThemeColor);
+        updateStyles(tree, targetProjectRoot, targetProject, options.uiThemeColor);
       }
 
       logger.info(`Finished updating project ${targetProject}`);
@@ -62,7 +63,7 @@ export async function tailwindCSSGenerator(
   };
 }
 
-function updateTailwindConfig(tree: Tree, projectRoot: string, projectName: string, colorMode: string) {
+function updateTailwindConfig(tree: Tree, projectRoot: string, projectName: string) {
   const tailwindConfigPath = path.join(projectRoot, 'tailwind.config.js');
   const templatePath = path.join(__dirname, 'files', 'tailwind.config.js.template');
 
@@ -71,19 +72,12 @@ function updateTailwindConfig(tree: Tree, projectRoot: string, projectName: stri
       throw new Error('Tailwind config template file not found');
     }
 
-    let newConfig = fs.readFileSync(templatePath, 'utf-8').trim();
-
-    // Add color mode to the config
-    newConfig = newConfig.replace(
-      'module.exports = {',
-      `module.exports = {
-  darkMode: ['class', '[data-mode="${colorMode}"]'],`
-    );
+    const newConfig = fs.readFileSync(templatePath, 'utf-8').trim();
 
     if (tree.exists(tailwindConfigPath)) {
       logger.info(`tailwind.config.js found for project ${projectName}. Merging configurations.`);
       const existingConfig = tree.read(tailwindConfigPath).toString().trim();
-      const mergedConfig = mergeConfigs(existingConfig, newConfig);
+      const mergedConfig = mergeConfigs(existingConfig, newConfig, projectRoot);
       tree.write(tailwindConfigPath, mergedConfig);
     } else {
       logger.info(`tailwind.config.js not found for project ${projectName}. Creating new configuration.`);
@@ -96,70 +90,49 @@ function updateTailwindConfig(tree: Tree, projectRoot: string, projectName: stri
 
 function updateStyles(tree: Tree, projectRoot: string, projectName: string, uiThemeColor: string) {
   const stylesPath = path.join(projectRoot, 'src', 'styles.css');
-  const tailwindImportsPath = path.join(__dirname, 'files', 'tailwind.imports.css.template');
   const themeFilePath = path.join(__dirname, 'files', 'themes', `${uiThemeColor}.css.template`);
 
   try {
-    if (!fs.existsSync(tailwindImportsPath)) {
-      throw new Error('Tailwind imports template file not found');
-    }
     if (!fs.existsSync(themeFilePath)) {
       throw new Error(`Theme file for ${uiThemeColor} not found`);
     }
 
-    const tailwindImports = fs.readFileSync(tailwindImportsPath, 'utf-8').trim();
-    const themeContent = fs.readFileSync(themeFilePath, 'utf-8').trim();
-
-    let updatedStylesContent = `${tailwindImports}\n\n${themeContent}\n`;
+    const newThemeContent = fs.readFileSync(themeFilePath, 'utf-8').trim();
 
     if (tree.exists(stylesPath)) {
-      const existingStyles = tree.read(stylesPath).toString().trim();
-      updatedStylesContent += `\n\n${existingStyles}`;
-    }
+      let existingStyles = tree.read(stylesPath).toString();
 
-    tree.write(stylesPath, updatedStylesContent);
-    logger.info(`Updated styles.css for project ${projectName}`);
+      // Ensure Angular CDK import is present
+      const cdkImport = "@import '@angular/cdk/overlay-prebuilt.css';";
+      if (!existingStyles.includes(cdkImport)) {
+        existingStyles = `${cdkImport}\n${existingStyles}`;
+      }
+
+      // Check if there's an existing theme
+      const themeRegex = /@layer\s+base\s+{[\s\S]*?}\s*}/;
+      if (themeRegex.test(existingStyles)) {
+        // Replace existing theme with new theme
+        existingStyles = existingStyles.replace(themeRegex, newThemeContent);
+      } else {
+        // If no existing theme, append the new theme
+        existingStyles += `\n\n${newThemeContent}`;
+      }
+
+      tree.write(stylesPath, existingStyles);
+      logger.info(`Updated styles.css for project ${projectName}`);
+    } else {
+      // If styles.css doesn't exist, create it with the default imports and new theme
+      const defaultImports = `@import '@angular/cdk/overlay-prebuilt.css';
+      @import 'tailwindcss/base';
+      @import 'tailwindcss/components';
+      @import 'tailwindcss/utilities';`;
+
+      const newStyles = `${defaultImports}\n\n${newThemeContent}`;
+      tree.write(stylesPath, newStyles);
+      logger.info(`Created styles.css for project ${projectName}`);
+    }
   } catch (error) {
     logger.error(`Error updating styles for ${projectName}: ${error}`);
-  }
-}
-
-
-function mergeConfigs(existingConfig: string, newConfig: string): string {
-  // This is a simple merge strategy. You might need to adjust it based on your specific needs.
-  try {
-    const existingModule = eval(`(${existingConfig})`);
-    const newModule = eval(`(${newConfig})`);
-
-    const mergedModule = {
-      ...existingModule,
-      ...newModule,
-      darkMode: newModule.darkMode,
-      presets: [...new Set([...(existingModule.presets || []), ...(newModule.presets || [])])],
-      content: [...new Set([...(existingModule.content || []), ...(newModule.content || [])])],
-      theme: {
-        ...existingModule.theme,
-        extend: {
-          ...(existingModule.theme?.extend || {}),
-          ...(newModule.theme?.extend || {}),
-        },
-      },
-      plugins: [...new Set([...(existingModule.plugins || []), ...(newModule.plugins || [])])],
-      variants: {
-        ...(existingModule.variants || {}),
-        extend: {
-          ...(existingModule.variants?.extend || {}),
-          ...(newModule.variants?.extend || {}),
-        },
-      },
-    };
-
-  // Use JSON.stringify with a custom replacer and then replace double quotes with single quotes
-  return `module.exports = ${JSON.stringify(mergedModule, null, 2).replace(/"([^"]+)":/g, "'$1':")};
-    `;
-  } catch (error) {
-    logger.error(`Error merging Tailwind configs: ${error}`);
-    return newConfig; // Fallback to using the new config if merge fails
   }
 }
 
