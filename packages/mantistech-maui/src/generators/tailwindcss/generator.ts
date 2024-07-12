@@ -15,7 +15,7 @@ export async function tailwindCSSGenerator(
   tree: Tree,
   options: TailwindCSSGeneratorSchema
 ): Promise<GeneratorCallback> {
-  const { project: targetProject } = options;
+  const { project: targetProject, colorMode = 'dark', uiThemeColor = 'theme-green' } = options;
 
   // Install Tailwind CSS and its dependencies
   addDependenciesToPackageJson(
@@ -40,11 +40,11 @@ export async function tailwindCSSGenerator(
       const targetProjectRoot = targetProjectConfig.root;
 
       if (!options.skipTailwindConfig) {
-        updateTailwindConfig(tree, targetProjectRoot, targetProject);
+        updateTailwindConfig(tree, targetProjectRoot, targetProject, colorMode);
       }
 
       if (!options.skipStylesUpdate) {
-        updateStyles(tree, targetProjectRoot, targetProject);
+        updateStyles(tree, targetProjectRoot, targetProject, uiThemeColor);
       }
 
       logger.info(`Finished updating project ${targetProject}`);
@@ -62,7 +62,7 @@ export async function tailwindCSSGenerator(
   };
 }
 
-function updateTailwindConfig(tree: Tree, projectRoot: string, projectName: string) {
+function updateTailwindConfig(tree: Tree, projectRoot: string, projectName: string, colorMode: string) {
   const tailwindConfigPath = path.join(projectRoot, 'tailwind.config.js');
   const templatePath = path.join(__dirname, 'files', 'tailwind.config.js.template');
 
@@ -71,7 +71,14 @@ function updateTailwindConfig(tree: Tree, projectRoot: string, projectName: stri
       throw new Error('Tailwind config template file not found');
     }
 
-    const newConfig = fs.readFileSync(templatePath, 'utf-8').trim();
+    let newConfig = fs.readFileSync(templatePath, 'utf-8').trim();
+
+    // Add color mode to the config
+    newConfig = newConfig.replace(
+      'module.exports = {',
+      `module.exports = {
+  darkMode: ['class', '[data-mode="${colorMode}"]'],`
+    );
 
     if (tree.exists(tailwindConfigPath)) {
       logger.info(`tailwind.config.js found for project ${projectName}. Merging configurations.`);
@@ -86,6 +93,37 @@ function updateTailwindConfig(tree: Tree, projectRoot: string, projectName: stri
     logger.error(`Error updating Tailwind config for ${projectName}: ${error}`);
   }
 }
+
+function updateStyles(tree: Tree, projectRoot: string, projectName: string, uiThemeColor: string) {
+  const stylesPath = path.join(projectRoot, 'src', 'styles.css');
+  const tailwindImportsPath = path.join(__dirname, 'files', 'tailwind.imports.css.template');
+  const themeFilePath = path.join(__dirname, 'files', 'themes', `${uiThemeColor}.css.template`);
+
+  try {
+    if (!fs.existsSync(tailwindImportsPath)) {
+      throw new Error('Tailwind imports template file not found');
+    }
+    if (!fs.existsSync(themeFilePath)) {
+      throw new Error(`Theme file for ${uiThemeColor} not found`);
+    }
+
+    const tailwindImports = fs.readFileSync(tailwindImportsPath, 'utf-8').trim();
+    const themeContent = fs.readFileSync(themeFilePath, 'utf-8').trim();
+
+    let updatedStylesContent = `${tailwindImports}\n\n${themeContent}\n`;
+
+    if (tree.exists(stylesPath)) {
+      const existingStyles = tree.read(stylesPath).toString().trim();
+      updatedStylesContent += `\n\n${existingStyles}`;
+    }
+
+    tree.write(stylesPath, updatedStylesContent);
+    logger.info(`Updated styles.css for project ${projectName}`);
+  } catch (error) {
+    logger.error(`Error updating styles for ${projectName}: ${error}`);
+  }
+}
+
 
 function mergeConfigs(existingConfig: string, newConfig: string): string {
   // This is a simple merge strategy. You might need to adjust it based on your specific needs.
@@ -124,32 +162,5 @@ function mergeConfigs(existingConfig: string, newConfig: string): string {
     return newConfig; // Fallback to using the new config if merge fails
   }
 }
-
-function updateStyles(tree: Tree, projectRoot: string, projectName: string) {
-  const stylesPath = `${projectRoot}/src/styles.css`;
-  const templatePath = path.join(__dirname, 'files', 'tailwind.imports.css.template');
-
-  try {
-    if (!fs.existsSync(templatePath)) {
-      throw new Error('Tailwind imports template file not found');
-    }
-
-    const updatedStylesImports = fs.readFileSync(templatePath, 'utf-8').trim();
-
-    if (tree.exists(stylesPath)) {
-      const existingStyles = tree.read(stylesPath).toString().trim();
-      const updatedStylesContent = `${updatedStylesImports}\n\n${existingStyles}`;
-      tree.write(stylesPath, updatedStylesContent);
-      logger.info(`Updated styles.css for project ${projectName}`);
-    } else {
-      logger.info(`styles.css not found for project ${projectName}. Creating new styles file.`);
-      tree.write(stylesPath, updatedStylesImports);
-    }
-  } catch (error) {
-    logger.error(`Error updating styles for ${projectName}: ${error}`);
-  }
-}
-
-
 
 export default tailwindCSSGenerator;

@@ -21,6 +21,20 @@
       "type": "boolean",
       "description": "Skip updating styles.css",
       "default": false
+    },
+    "colorMode": {
+      "type": "string",
+      "description": "Color mode to use",
+      "enum": ["light", "dark"],
+      "default": "dark",
+      "x-prompt": "What color mode do you want to use?"
+    },
+    "uiThemeColor": {
+      "type": "string",
+      "description": "UI theme color to use",
+      "enum": ["theme-green", "theme-blue", "theme-red", "theme-orange", "theme-zinc"],
+      "default": "theme-green",
+      "x-prompt": "What UI theme color do you want to use?"
     }
   },
   "required": ["project"]
