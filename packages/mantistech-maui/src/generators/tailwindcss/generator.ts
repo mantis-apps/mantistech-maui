@@ -11,6 +11,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { TailwindCSSGeneratorSchema } from './schema';
 import { mergeConfigs } from './tailwind.config.utils';
+import { updateRootTags } from './update.root.tags';
 
 export async function tailwindCSSGenerator(
   tree: Tree,
@@ -46,6 +47,10 @@ export async function tailwindCSSGenerator(
 
       if (!options.skipStylesUpdate) {
         updateStyles(tree, targetProjectRoot, targetProject, options.uiThemeColor);
+      }
+
+      if (!options.skipHtmlUpdate) {
+        updateRootTags(tree, targetProjectRoot, options.colorMode, options.uiThemeColor);
       }
 
       logger.info(`Finished updating project ${targetProject}`);

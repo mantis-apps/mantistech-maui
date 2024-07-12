@@ -22,6 +22,11 @@
       "description": "Skip updating styles.css",
       "default": false
     },
+    "skipHtmlUpdate": {
+      "type": "boolean",
+      "description": "Skip updating index.html",
+      "default": false
+    },
     "colorMode": {
       "type": "string",
       "description": "Color mode to use",
